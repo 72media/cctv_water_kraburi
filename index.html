@@ -1,0 +1,377 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>CCTV Map Pro | กล้อง + พยากรณ์อากาศจริง</title>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', system-ui, 'Segoe UI', 'Prompt', sans-serif;
+            background: #0b0f1a;
+            overflow: hidden;
+            color: white;
+        }
+        #map { height: 100vh; width: 100%; }
+
+        /* Top Bar */
+        .top-bar {
+            position: absolute; top: 16px; left: 20px; z-index: 10000;
+            display: flex; gap: 10px;
+        }
+        .time-card, .weather-btn {
+            background: rgba(12, 20, 28, 0.88);
+            backdrop-filter: blur(12px);
+            border-radius: 48px;
+            padding: 10px 22px;
+            font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .time-card { font-family: 'JetBrains Mono', monospace; color: #bbf0e6; }
+        .weather-btn { color: #ffe6b3; cursor: pointer; border: 1px solid rgba(255,200,100,0.6); }
+
+        /* ==================== SIDEBAR ==================== */
+        .cctv-sidebar {
+            position: absolute;
+            top: 88px; left: 18px;
+            z-index: 5000;
+            background: rgba(8, 14, 22, 0.92);
+            backdrop-filter: blur(16px);
+            border-radius: 28px;
+            border: 1px solid rgba(64, 224, 208, 0.35);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+            width: 300px;
+            max-height: calc(100vh - 120px);
+            transition: width 0.35s cubic-bezier(0.25, 0.8, 0.4, 1);
+            overflow: hidden;
+        }
+        .cctv-sidebar.collapsed {
+            width: 68px;
+        }
+
+        /* Expanded State */
+        .sidebar-expanded {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .sidebar-header {
+            padding: 18px 20px 12px 20px;
+            border-bottom: 1px solid rgba(100,220,200,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .sidebar-header h3 {
+            font-size: 1.22rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #c0f0ff, #a0ffcc);
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+        .toggle-sidebar-btn {
+            background: rgba(255,255,255,0.12);
+            border: none;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            color: #c0ffec;
+            font-size: 1.7rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .toggle-sidebar-btn:hover {
+            background: rgba(0, 200, 180, 0.6);
+        }
+
+        .camera-list-container {
+            overflow-y: auto;
+            padding: 10px 8px 20px;
+            flex: 1;
+        }
+        .camera-item {
+            background: rgba(20,30,38,0.75);
+            margin: 8px;
+            padding: 13px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .camera-item:hover {
+            background: rgba(40,70,75,0.9);
+            transform: translateX(8px);
+        }
+        .camera-item.active {
+            background: linear-gradient(105deg, #1f4e4b, #0f3835);
+            border-left: 5px solid #3effe0;
+        }
+
+        /* Collapsed State - ปุ่มวงกลมใหญ่ตรงกลาง */
+        .sidebar-collapsed-content {
+            display: none;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 10px;
+        }
+        .cctv-sidebar.collapsed .sidebar-collapsed-content {
+            display: flex;
+        }
+        .cctv-sidebar.collapsed .sidebar-expanded {
+            display: none;
+        }
+
+        .expand-trigger {
+            width: 58px;
+            height: 58px;
+            background: rgba(20, 40, 45, 0.95);
+            border: 3px solid #2acfba;
+            color: #8effe0;
+            font-size: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+            transition: all 0.3s;
+        }
+        .expand-trigger:hover {
+            transform: scale(1.12);
+            background: #1b6b62;
+        }
+
+        /* Popup */
+        .leaflet-popup-content-wrapper {
+            background: #11181fdd;
+            backdrop-filter: blur(14px);
+            border: 1px solid #2affcf;
+            border-radius: 24px;
+            color: white;
+        }
+        .open-cctv-btn {
+            display: block;
+            margin: 14px auto;
+            padding: 14px 32px;
+            background: linear-gradient(90deg, #00d4aa, #00b894);
+            color: white;
+            font-weight: 700;
+            border-radius: 50px;
+            text-decoration: none;
+            box-shadow: 0 8px 25px rgba(0,212,170,0.5);
+        }
+        .weather-real {
+            margin: 12px 0;
+            padding: 12px;
+            background: rgba(0,0,0,0.45);
+            border-radius: 16px;
+            font-size: 0.93rem;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <div id="thaiTime" class="time-card"></div>
+    <div id="weatherToggleBtn" class="weather-btn">🌤️ พยากรณ์อากาศ</div>
+</div>
+
+<!-- Sidebar -->
+<div id="cctvSidebar" class="cctv-sidebar">
+    
+    <!-- Expanded -->
+    <div class="sidebar-expanded">
+        <div class="sidebar-header">
+            <h3>📹 กล้อง + ระดับน้ำ</h3>
+            <button id="collapseSidebarBtn" class="toggle-sidebar-btn">◀</button>
+        </div>
+        <div id="cameraListContainer" class="camera-list-container"></div>
+    </div>
+
+    <!-- Collapsed - ปุ่มวงกลม -->
+    <div class="sidebar-collapsed-content">
+        <div id="expandSidebarBtn" class="expand-trigger">🎥</div>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script>
+// โหลด Leaflet
+async function loadLeaflet() {
+    return new Promise((resolve, reject) => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = resolve; script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
+
+let map;
+let cameraData = [];
+
+// เวลาไทย
+function updateThaiTime() {
+    const opt = { timeZone: "Asia/Bangkok", year:"numeric", month:"long", day:"numeric", weekday:"long", hour:"2-digit", minute:"2-digit", second:"2-digit" };
+    document.getElementById("thaiTime").innerText = new Intl.DateTimeFormat("th-TH", opt).format(new Date());
+}
+setInterval(updateThaiTime, 1000);
+updateThaiTime();
+
+// กล้อง
+const camerasRaw = [
+    { name: "RNG01 - บ้านปากจั่น",     lat: 10.533170, lon: 98.823570, station: "RNG01" },
+    { name: "RNG02 - บ้านปลายคลอง",   lat: 10.403240, lon: 98.777100, station: "RNG02" },
+    { name: "RNG03 - บ้านลำเลียง",     lat: 10.306850, lon: 98.854310, station: "RNG03" },
+    { name: "RNG04 - บ้านสองแพรก",     lat: 10.264550, lon: 98.828420, station: "RNG04" },
+    { name: "RNG05 - สะพานลำเลียง",   lat: 10.311060, lon: 98.795300, station: "RNG05" }
+];
+
+// ดึงข้อมูลอากาศจริง
+async function getWeather(lat, lon) {
+    try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=Asia/Bangkok`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const c = data.current;
+
+        let condition = "☀️ ท้องฟ้าแจ่มใส";
+        if (c.weather_code >= 51) condition = "🌧️ ฝนตก";
+        if (c.weather_code >= 45) condition = "🌫️ หมอก";
+
+        const warning = c.precipitation > 5 ? '<span style="color:#ff6b6b;">⚠️ เสี่ยงฝนหนัก</span>' : '';
+
+        return `
+            <div class="weather-real">
+                🌡️ <strong>${c.temperature_2m}°C</strong> (รู้สึกเหมือน ${c.apparent_temperature}°C)<br>
+                💧 ความชื้น <strong>${c.relative_humidity_2m}%</strong><br>
+                🌧️ ฝน <strong>${c.precipitation} มม.</strong><br>
+                💨 ลม <strong>${c.wind_speed_10m} กม./ชม.</strong><br>
+                ${condition} ${warning}
+            </div>
+        `;
+    } catch (e) {
+        return `<div class="weather-real">⚠️ ไม่สามารถโหลดข้อมูลอากาศ</div>`;
+    }
+}
+
+async function initMarkers() {
+    const cctvIcon = L.icon({
+        iconUrl: 'https://i.ibb.co/1hX5YCQ/cctv-1.png',
+        iconSize: [46, 46], iconAnchor: [23, 46], popupAnchor: [0, -40]
+    });
+
+    for (let i = 0; i < camerasRaw.length; i++) {
+        const cam = camerasRaw[i];
+        const weatherHTML = await getWeather(cam.lat, cam.lon);
+        const cctvUrl = `https://cctv.disaster.go.th/stations/${cam.station}`;
+
+        const popupHTML = `
+            <div style="padding:10px 15px; text-align:center;">
+                <div style="font-weight:700; font-size:1.2rem; margin-bottom:10px;">📹 ${cam.name}</div>
+                ${weatherHTML}
+                <a href="${cctvUrl}" target="_blank" class="open-cctv-btn">🔴 เปิดดูภาพสด CCTV</a>
+                <small style="opacity:0.75; margin-top:8px; display:block;">ข้อมูลอากาศจาก Open-Meteo</small>
+            </div>
+        `;
+
+        const marker = L.marker([cam.lat, cam.lon], { icon: cctvIcon }).addTo(map);
+        marker.bindPopup(popupHTML, { maxWidth: 460 });
+        cameraData.push({ id: i, ...cam, marker });
+        marker.on('popupopen', () => highlightSidebarItem(i));
+    }
+}
+
+function buildCameraList() {
+    const container = document.getElementById('cameraListContainer');
+    let html = '';
+    cameraData.forEach((cam, i) => {
+        html += `
+            <div class="camera-item" data-idx="${i}">
+                <span style="font-size:28px;">📷</span>
+                <div style="flex:1;">
+                    <div style="font-weight:700;">${cam.name}</div>
+                    <div style="font-size:0.73rem; color:#aacfd9; font-family:monospace;">📍 ${cam.lat.toFixed(5)}, ${cam.lon.toFixed(5)}</div>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+
+    document.querySelectorAll('.camera-item').forEach(item => {
+        item.addEventListener('click', () => flyToCamera(parseInt(item.dataset.idx)));
+    });
+}
+
+function highlightSidebarItem(idx) {
+    document.querySelectorAll('.camera-item').forEach(el => el.classList.remove('active'));
+    const item = document.querySelector(`.camera-item[data-idx="${idx}"]`);
+    if (item) item.classList.add('active');
+}
+
+function flyToCamera(idx) {
+    if (!cameraData[idx]) return;
+    const cam = cameraData[idx];
+    map.flyTo([cam.lat, cam.lon], 15, { duration: 1.3 });
+    cam.marker.openPopup();
+    highlightSidebarItem(idx);
+}
+
+function setupSidebar() {
+    const sidebar = document.getElementById('cctvSidebar');
+    document.getElementById('collapseSidebarBtn').addEventListener('click', () => sidebar.classList.add('collapsed'));
+    document.getElementById('expandSidebarBtn').addEventListener('click', () => sidebar.classList.remove('collapsed'));
+}
+
+function setupWeatherPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'weatherPanel';
+    panel.style.cssText = `display:none; position:absolute; top:100px; left:50%; transform:translateX(-50%); width:90%; max-width:920px; background:rgba(12,20,30,0.96); backdrop-filter:blur(20px); border-radius:32px; padding:22px; z-index:11000;`;
+    panel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+            <h3>🌦️ พยากรณ์อากาศ 48 ชั่วโมง อ.กระบุรี</h3>
+            <button id="closeWeather" style="background:none;border:none;color:#ff8888;font-size:1.8rem;cursor:pointer;">✕</button>
+        </div>
+        <div style="background:#051016;border-radius:20px;padding:10px;text-align:center;">
+            <img src="https://www.yr.no/en/content/2-1152625/meteogram.svg?mode=dark&t=${Date.now()}" style="max-width:100%;border-radius:16px;" alt="Meteogram">
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    document.getElementById('weatherToggleBtn').addEventListener('click', () => {
+        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    });
+    document.getElementById('closeWeather').addEventListener('click', () => panel.style.display = 'none');
+}
+
+// เริ่มต้น
+async function initApp() {
+    await loadLeaflet();
+
+    map = L.map('map').setView([10.403240, 98.777100], 12);
+    L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        subdomains: ['mt0','mt1','mt2','mt3'], maxZoom: 20
+    }).addTo(map);
+    map.zoomControl.setPosition('bottomright');
+
+    await initMarkers();
+    buildCameraList();
+    setupSidebar();
+    setupWeatherPanel();
+
+    console.log("✅ Sidebar แบบเดิมพร้อมใช้งานแล้ว");
+}
+
+window.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
