@@ -750,5 +750,80 @@ updateThaiTime();
 setInterval(updateThaiTime, 1000);
 window.addEventListener('DOMContentLoaded', init);
 </script>
+
+<script>
+/* ================================================================
+   ★ เพิ่มใหม่: ปุ่ม ◀ ยุบ/ขยายแถบกล้อง + ยุบอัตโนมัติตอนเปิด grid
+   ================================================================ */
+(function () {
+  const RESTORE_ON_RETURN = true; // true = กลับแผนที่แล้วคืนแถบให้ / false = กลับมาแถบยังยุบ (แผนที่เต็มจอ)
+  const sb = document.querySelector('.cctv-sidebar');
+  if (!sb) return;
+
+  /* ---- CSS (เพิ่มครั้งเดียว) ---- */
+  if (!document.getElementById('sbStyle')) {
+    const st = document.createElement('style');
+    st.id = 'sbStyle';
+    st.textContent = `
+      .sidebar-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+      #sbCollapseBtn{flex:0 0 auto;background:rgba(255,255,255,.13);border:none;width:32px;height:32px;
+          border-radius:50%;color:#c0ffec;font-size:1rem;line-height:1;cursor:pointer;transition:.2s}
+      #sbCollapseBtn:hover{background:rgba(0,200,180,.6)}
+      .cctv-sidebar.sb-hidden{display:none!important}
+      #sbExpandBtn{position:absolute;top:96px;left:16px;z-index:5001;width:56px;height:56px;border-radius:50%;
+          background:rgba(8,14,22,.96);border:2px solid #2acfba;color:#8effe0;font-size:24px;
+          display:none;align-items:center;justify-content:center;cursor:pointer;
+          box-shadow:0 10px 26px rgba(0,0,0,.55);transition:.2s}
+      #sbExpandBtn:hover{background:#1b6b62;transform:scale(1.06)}`;
+    document.head.appendChild(st);
+  }
+
+  /* ---- ปุ่ม ◀ ในหัวแถบ ---- */
+  const head = sb.querySelector('.sidebar-header');
+  let cBtn = document.getElementById('sbCollapseBtn');
+  if (head && !cBtn) {
+    cBtn = document.createElement('button');
+    cBtn.id = 'sbCollapseBtn'; cBtn.type = 'button';
+    cBtn.title = 'ยุบแถบ — เห็นแผนที่เต็มจอ'; cBtn.innerHTML = '◀';
+    head.appendChild(cBtn);
+  }
+
+  /* ---- ปุ่มวงกลม 🎥 เรียกคืน ---- */
+  let expand = document.getElementById('sbExpandBtn');
+  if (!expand) {
+    expand = document.createElement('button');
+    expand.id = 'sbExpandBtn'; expand.type = 'button';
+    expand.title = 'แสดงแถบรายชื่อกล้อง'; expand.innerHTML = '🎥';
+    document.body.appendChild(expand);
+  }
+
+  function sbSetHidden(hidden) {
+    sb.classList.toggle('sb-hidden', hidden);
+    expand.style.display = hidden ? 'flex' : 'none';
+  }
+  if (cBtn) cBtn.addEventListener('click', () => sbSetHidden(true));
+  expand.addEventListener('click', () => sbSetHidden(false));
+
+  /* ---- ยุบตอนเปิด grid · คืนเมื่อกลับแผนที่ ---- */
+  if (!window.__sbGridHooked && window.openGrid && window.closeGrid) {
+    window.__sbGridHooked = true;
+    const _openGrid  = window.openGrid;
+    const _closeGrid = window.closeGrid;
+    window.openGrid = function () {
+      const ret = _openGrid.apply(this, arguments);
+      const gv = document.getElementById('gridView');
+      if (gv && gv.classList.contains('show')) sbSetHidden(true);   // เปิด grid → ยุบแถบ
+      return ret;
+    };
+    window.closeGrid = function () {
+      const gv = document.getElementById('gridView');
+      const wasInGrid = !!(gv && gv.classList.contains('show'));    // จับก่อนปิดว่าอยู่ใน grid
+      const ret = _closeGrid.apply(this, arguments);
+      if (wasInGrid) sbSetHidden(!RESTORE_ON_RETURN);               // ออกจาก grid → คืนแถบ
+      return ret;
+    };
+  }
+})();
+</script>
 </body>
 </html>
