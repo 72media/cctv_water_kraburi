@@ -1,30 +1,31 @@
-async function refreshLevels(){
-  try {
-    // ดึงไฟล์ JSON จากใน GitHub ของเราเอง (ไม่ติด CORS 100%)
-    const r = await fetch('./water_levels.json?t=' + Date.now()); 
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const jsonData = await r.json();
+name: Update Water Levels
 
-    CAMERAS.forEach(c => {
-      const d = jsonData[c.code];
-      if (d && d.level != null) {
-        const level = parseNum(d.level);
-        const bank  = parseNum(d.bank);
-        const ratio = (level != null && bank > 0) ? level / bank : null;
-        levelData[c.code] = { level, bank, ratio, cls: levelClass(ratio) };
-      } else {
-        levelData[c.code] = { level:null, bank:null, ratio:null, cls:'gray' };
-      }
-    });
-  } catch(e) {
-    console.error("ไม่สามารถโหลดข้อมูลระดับน้ำได้", e);
-  }
-  
-  // อัปเดต UI ต่างๆ (ปล่อยไว้เหมือนเดิม)
-  updateMarkers();
-  updateSidebar();
-  if (gridOpen) updateGridLevels();
-  if (modalOpen && modalCode) fillModalLevel();
-  checkAlerts();
-}
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch data
+        run: node fetch_water.js
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add water_levels.json
+          git commit -m "Auto-update water levels" || exit 0
+          git push
