@@ -1,0 +1,29 @@
+async function refreshLevels(){
+  try {
+    // ดึงไฟล์ JSON จากใน GitHub ของเราเอง (ไม่ติด CORS 100%)
+    const r = await fetch('./water_levels.json?t=' + Date.now()); 
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const jsonData = await r.json();
+
+    CAMERAS.forEach(c => {
+      const d = jsonData[c.code];
+      if (d && d.level != null) {
+        const level = parseNum(d.level);
+        const bank  = parseNum(d.bank);
+        const ratio = (level != null && bank > 0) ? level / bank : null;
+        levelData[c.code] = { level, bank, ratio, cls: levelClass(ratio) };
+      } else {
+        levelData[c.code] = { level:null, bank:null, ratio:null, cls:'gray' };
+      }
+    });
+  } catch(e) {
+    console.error("ไม่สามารถโหลดข้อมูลระดับน้ำได้", e);
+  }
+  
+  // อัปเดต UI ต่างๆ (ปล่อยไว้เหมือนเดิม)
+  updateMarkers();
+  updateSidebar();
+  if (gridOpen) updateGridLevels();
+  if (modalOpen && modalCode) fillModalLevel();
+  checkAlerts();
+}
