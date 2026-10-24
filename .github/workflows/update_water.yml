@@ -27,3 +27,4 @@ async function refreshLevels(){
   if (modalOpen && modalCode) fillModalLevel();
   checkAlerts();
 }
+
