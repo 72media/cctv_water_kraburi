@@ -325,23 +325,36 @@ function beep(count){
   }catch(e){}
 }
 
-/* ---------- ดึงระดับน้ำ (ทุกสถานี) ---------- */
+/* ---------- ดึงระดับน้ำ (ดึงจากไฟล์ JSON ของ GitHub แทนเพื่อเลี่ยง CORS) ---------- */
 async function refreshLevels(){
-  await Promise.all(CAMERAS.map(async c => {
-    try{
-      const r = await fetch('https://cctv.disaster.go.th/api/v1/stations/' + c.code);
-      if (!r.ok) throw new Error('http ' + r.status);
-      const d = await r.json();
-      const level = parseNum(d.currentWaterLevel != null ? d.currentWaterLevel
-                     : (d.waterLevel ? d.waterLevel.current : null));
-      const bank  = parseNum(d.riverBankLevel != null ? d.riverBankLevel
-                     : (d.waterThreshold ? d.waterThreshold.bankLevel : null));
-      const ratio = (level != null && bank > 0) ? level / bank : null;
-      levelData[c.code] = { level, bank, ratio, cls: levelClass(ratio) };
-    }catch(e){
-      levelData[c.code] = { level:null, bank:null, ratio:null, cls:'gray' };
-    }
-  }));
+  try {
+    // ดึงไฟล์ JSON จาก GitHub Pages ของเราเอง (ไม่ติด CORS 100%)
+    const r = await fetch('./water_levels.json?t=' + Date.now()); 
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const jsonData = await r.json();
+
+    CAMERAS.forEach(c => {
+      const d = jsonData[c.code];
+      if (d && d.level != null) {
+        const level = parseNum(d.level);
+        const bank  = parseNum(d.bank);
+        const ratio = (level != null && bank > 0) ? level / bank : null;
+        levelData[c.code] = { level, bank, ratio, cls: levelClass(ratio) };
+      } else {
+        levelData[c.code] = { level:null, bank:null, ratio:null, cls:'gray' };
+      }
+    });
+  } catch(e) {
+    console.error("ไม่สามารถโหลดข้อมูลระดับน้ำได้", e);
+    // ถ้าโหลดไฟล์ไม่สำเร็จ ให้แสดงสถานะเป็นสีเทา
+    CAMERAS.forEach(c => {
+        if (!levelData[c.code] || levelData[c.code].level == null) {
+            levelData[c.code] = { level:null, bank:null, ratio:null, cls:'gray' };
+        }
+    });
+  }
+  
+  // อัปเดต UI ต่างๆ
   updateMarkers();
   updateSidebar();
   if (gridOpen) updateGridLevels();
